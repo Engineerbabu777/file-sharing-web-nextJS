@@ -1,21 +1,68 @@
 'use client'
 
 import React, { useState } from 'react'
+import FilePreview from './FilePreview'
+import {
+  getDownloadURL,
+  getStorage,
+  ref,
+  uploadBytes,
+  uploadBytesResumable
+} from 'firebase/storage'
+import { app } from '@/firebase'
+import ProgressBar from './ProgressBar'
+import { addDoc, collection, getFirestore, setDoc } from 'firebase/firestore'
+import { useUser } from '@clerk/nextjs'
 
 type Props = {}
 
 export default function UploadForm ({}: Props) {
-  const [file, setFile] = useState<any>(null)
+  const [file, setFile] = useState <any>(null)
+  const [progress, setProgress] = useState<any>();
+  const {user} = useUser();
+
+
+  const storage = getStorage(app)
+  const db = getFirestore(app);
+
+  const saveDoc = async(file:any, fileUrl:any) => {
+     const docId = Date.now().toString();
+     await addDoc(collection(db,'uploaded-files'),{
+        fileName: file?.name,
+        fileSize: file?.size,
+        fileType: file?.type,
+        fileUrl: fileUrl,
+        userEmail: user?.primaryEmailAddress?.emailAddress,
+        userName: user?.fullName,
+        password:'',
+        id:docId,
+        shortUrl: process.env.NEXT_PUBLIC_BASE_URL + docId,
+     })
+  }
+  const uploadFile = async(file: any) => {
+    const storageRef = ref(storage, 'file/' + file)
+
+    const uploadTask = uploadBytesResumable(storageRef, file)
+
+    uploadTask.on('state_changed', snapshot => {
+      const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100
+      setProgress(progress)
+      console.log('Upload is ' + progress + '% done')
+
+      progress === 100&& getDownloadURL(uploadTask.snapshot.ref).then(downloadURL => {
+        saveDoc(file,downloadURL)
+      })
+    })
+  }
 
   const handleEvent = () => {
-    if (file) return;
-
-    if(file && file.size>2000000){
+    if (file && file.size > 2000000) {
       alert('File size is too big')
-        return;
+      return
     }
 
-    setFile(file);
+    // ADD !!
+    uploadFile(file)
   }
 
   return (
@@ -52,8 +99,7 @@ export default function UploadForm ({}: Props) {
             </p>
           </div>
           <input
-            onChange={e => 
-                setFile(e?.target?.files)}
+            onChange={(e: any) => setFile(e?.target?.files[0])}
             id='dropzone-file'
             type='file'
             className='hidden'
@@ -61,12 +107,24 @@ export default function UploadForm ({}: Props) {
         </label>
       </div>
 
-      <button onClick={handleEvent}
+      {file && <FilePreview file={file} />}
+      {file && (
+        <button
+          className='text-sm text-red-500 cursor-pointer'
+          onClick={() => setFile(null)}
+        >
+          X
+        </button>
+      )}
+
+      <button
+        onClick={handleEvent}
         disabled={!file}
         className='p-2 bg-primary text-white w-[30%] rounded-full mt-5 disabled:bg-gray-400 '
       >
         Upload
       </button>
+     {progress && <ProgressBar width={progress}/>}
     </div>
   )
 }
