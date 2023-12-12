@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import FilePreview from './FilePreview'
 import {
   getDownloadURL,
@@ -11,8 +11,9 @@ import {
 } from 'firebase/storage'
 import { app } from '@/firebase'
 import ProgressBar from './ProgressBar'
-import { addDoc, collection, getFirestore, setDoc } from 'firebase/firestore'
+import { addDoc, collection, doc, getFirestore, setDoc } from 'firebase/firestore'
 import { useUser } from '@clerk/nextjs'
+import { useRouter } from 'next/navigation'
 
 type Props = {}
 
@@ -20,14 +21,14 @@ export default function UploadForm ({}: Props) {
   const [file, setFile] = useState <any>(null)
   const [progress, setProgress] = useState<any>();
   const {user} = useUser();
-
-
+  const router = useRouter();
+  const [uploadCompleted , setUploadCompleted] = useState(false);
   const storage = getStorage(app)
   const db = getFirestore(app);
-
+  const [fileId, setFileId] = useState<any>();
   const saveDoc = async(file:any, fileUrl:any) => {
      const docId = Date.now().toString();
-     await addDoc(collection(db,'uploaded-files'),{
+     await setDoc(doc(collection(db,'uploaded-files'),docId),{
         fileName: file?.name,
         fileSize: file?.size,
         fileType: file?.type,
@@ -36,8 +37,9 @@ export default function UploadForm ({}: Props) {
         userName: user?.fullName,
         password:'',
         id:docId,
-        shortUrl: process.env.NEXT_PUBLIC_BASE_URL + docId,
+        shortUrl: process.env.NEXT_PUBLIC_BASE_URL +"/"+ docId,
      })
+     setFileId(docId);
   }
   const uploadFile = async(file: any) => {
     const storageRef = ref(storage, 'file/' + file)
@@ -64,6 +66,13 @@ export default function UploadForm ({}: Props) {
     // ADD !!
     uploadFile(file)
   }
+
+  useEffect(() => {
+    fileId && setTimeout((() => {
+      // setUploadCompleted(false);
+      router.push('/file-preview/'+fileId);
+    }))
+  },[fileId])
 
   return (
     <div className='mx-auto w-full flex justify-center flex-col items-center'>
